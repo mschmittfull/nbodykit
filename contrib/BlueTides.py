@@ -15,8 +15,6 @@ class BlueTidesDataSource(DataSource):
         h = kls.parser
 
         h.add_argument("path", help="path to file")
-        h.add_argument("BoxSize", type=kls.BoxSizeParser,
-            help="the size of the isotropic box, or the sizes of the 3 box dimensions")
         h.add_argument("-ptype", dest='ptypes', action='append', 
             choices=["0", "1", "2", "3", "4", "5", "FOFGroups"], help="type of particle to read")
         h.add_argument("-load", dest='load', action='append', default=[],
@@ -28,7 +26,14 @@ class BlueTidesDataSource(DataSource):
         h.add_argument("-select", default=None, type=selectionlanguage.Query,
             help='row selection e.g. Mass > 1e3 and Mass < 1e5')
     
-    def read(self, columns, comm, stats, full=False):
+    def finalize_attributes(self):
+        f = bigfile.BigFile(self.path)
+        header = f['header']
+        boxsize = header.attrs['BoxSize'][0] / 1000.
+        self.BoxSize = numpy.empty(3)
+        self.BoxSize[:] = boxsize
+
+    def read(self, columns, stats, full=False):
         f = bigfile.BigFile(self.path)
         header = f['header']
         boxsize = header.attrs['BoxSize'][0]
@@ -47,13 +52,13 @@ class BlueTidesDataSource(DataSource):
 
         readcolumns = readcolumns + self.load
         for ptype in ptypes:
-            for data in self.read_ptype(ptype, readcolumns, comm, stats, full):
+            for data in self.read_ptype(ptype, readcolumns, stats, full):
                 P = dict(zip(readcolumns, data))
                 if 'HI' in columns:
                     P['HI'] = P['NeutralHydrogenFraction'] * P['Mass']
 
                 if 'Position' in columns:
-                    P['Position'][:] *= self.BoxSize / boxsize
+                    P['Position'][:] /= 1000.00
                     P['Position'][:] %= self.BoxSize
 
                 if 'Velocity' in columns:
@@ -65,11 +70,11 @@ class BlueTidesDataSource(DataSource):
                     mask = Ellipsis
                 yield [P[column][mask] for column in columns]
 
-    def read_ptype(self, ptype, columns, comm, stats, full):
+    def read_ptype(self, ptype, columns, stats, full):
         f = bigfile.BigFile(self.path)
         done = False
         i = 0
-        while not numpy.all(comm.allgather(done)):
+        while not numpy.all(self.comm.allgather(done)):
             ret = []
             for column in columns:
                 f = bigfile.BigFile(self.path)
@@ -87,8 +92,8 @@ class BlueTidesDataSource(DataSource):
                 cdata = f['%s/%s' % (ptype, read_column)]
 
                 Ntot = cdata.size
-                start = comm.rank * Ntot // comm.size
-                end = (comm.rank + 1) * Ntot //comm.size
+                start = self.comm.rank * Ntot // self.comm.size
+                end = (self.comm.rank + 1) * Ntot //self.comm.size
                 if not full:
                     bunchstart = start + i * self.bunchsize
                     bunchend = start + (i + 1) * self.bunchsize
@@ -101,7 +106,7 @@ class BlueTidesDataSource(DataSource):
                     done = True
                 data = cdata[bunchstart:bunchend]
                 ret.append(data)
-            stats['Ntot'] += comm.allreduce(bunchend - bunchstart)
+            stats['Ntot'] += self.comm.allreduce(bunchend - bunchstart)
             i = i + 1
             yield ret
 
