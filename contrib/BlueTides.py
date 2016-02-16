@@ -27,14 +27,16 @@ class BlueTidesDataSource(DataSource):
             help='row selection e.g. Mass > 1e3 and Mass < 1e5')
     
     def finalize_attributes(self):
-        f = bigfile.BigFile(self.path)
+        f = bigfile.BigFileMPI(self.comm, self.path)
         header = f['header']
         boxsize = header.attrs['BoxSize'][0] / 1000.
         self.BoxSize = numpy.empty(3)
         self.BoxSize[:] = boxsize
+        if self.comm.rank == 0:
+            logger.info("Boxsize is %s Mpc/h" % str(self.BoxSize))
 
     def read(self, columns, stats, full=False):
-        f = bigfile.BigFile(self.path)
+        f = bigfile.BigFileMPI(self.comm, self.path)
         header = f['header']
         boxsize = header.attrs['BoxSize'][0]
 
@@ -71,7 +73,7 @@ class BlueTidesDataSource(DataSource):
                 yield [P[column][mask] for column in columns]
 
     def read_ptype(self, ptype, columns, stats, full):
-        f = bigfile.BigFile(self.path)
+        f = bigfile.BigFileMPI(self.comm, self.path)
         done = False
         i = 0
         while not numpy.all(self.comm.allgather(done)):
@@ -107,6 +109,8 @@ class BlueTidesDataSource(DataSource):
                 data = cdata[bunchstart:bunchend]
                 ret.append(data)
             stats['Ntot'] += self.comm.allreduce(bunchend - bunchstart)
+            if self.comm.rank == 0:
+                logger.info("Ntot = %d" % stats['Ntot'])
             i = i + 1
             yield ret
 
