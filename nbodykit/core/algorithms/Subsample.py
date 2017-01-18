@@ -47,9 +47,11 @@ class Subsample(Algorithm):
         import mpsort
         from astropy.utils.misc import NumpyRNGContext
 
+        #print("MSINFO: smoothing", self.smoothing, self.datasource.BoxSize, self.Nmesh)
         if self.smoothing is None:
-            self.smoothing = self.datasource.BoxSize[0] / self.Nmesh[0]
-        elif (self.datasource.BoxSize / self.Nmesh > self.smoothing).any():
+            #self.smoothing = self.datasource.BoxSize[0] / self.Nmesh[0]
+            self.smoothing = self.datasource.BoxSize[0] / self.Nmesh
+        elif (self.datasource.BoxSize / float(self.Nmesh) > self.smoothing).any():
             raise ValueError("smoothing is too small")
      
         def Smoothing(pm, complex):
