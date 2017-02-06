@@ -5,11 +5,18 @@ import numpy
 class Subsample(Algorithm):
     """
     Algorithm to create a subsample from a DataSource, and evaluate
-    the density (1 + delta), smoothed at the given scale
+    the density (1 + delta), smoothed at the given scale.
+
+    Set the sampling parameter to 'random' for a random subsample or 
+    to 'id_modulo' to keep particles whose IDs satisfy
+    ID%id_modulo_divisor==id_modulo_remainder.
+    Here, id_modulo_divisor should be a prime number, for example
+    101, 1009, 10007, 100003.
     """
     plugin_name = "Subsample"
     
-    def __init__(self, datasource, Nmesh, seed=12345, ratio=0.01, smoothing=None, format='hdf5'):
+    def __init__(self, datasource, Nmesh, seed=12345, ratio=0.01, smoothing=None, format='hdf5',
+                 sampling='random', id_modulo_divisor=101, id_modulo_remainder=0):
         from pmesh.pm import ParticleMesh
 
         self.datasource = datasource
@@ -18,6 +25,9 @@ class Subsample(Algorithm):
         self.ratio      = ratio
         self.smoothing  = smoothing
         self.format     = format
+        self.sampling   = sampling
+        self.id_modulo_divisor = id_modulo_divisor
+        self.id_modulo_remainder = id_modulo_remainder
 
         self.pm = ParticleMesh(BoxSize=self.datasource.BoxSize, Nmesh=[self.Nmesh] * 3, dtype='f4', comm=self.comm)
 
@@ -26,19 +36,34 @@ class Subsample(Algorithm):
         
         s = cls.schema
         s.description = "create a subsample from a DataSource, and evaluate density \n"
-        s.description += "(1 + delta) smoothed at the given scale"
+        s.description += "(1 + delta) smoothed at the given scale.\n\n"
+        s.description += "Set the sampling parameter to 'random' for a random subsample or "
+        s.description += "to 'id_modulo' to keep particles whose IDs satisfy"
+        s.description += "ID%id_modulo_divisor==id_modulo_remainder.\n"
+        s.description += "Here, id_modulo_divisor should be a prime number, for example"
+        s.description += "101, 1009, 10007, 100003."
         
         s.add_argument("datasource", type=DataSource.from_config,
             help="the DataSource to read; run `nbkit.py --list-datasources` for all options")
         s.add_argument("Nmesh", type=int, help='the size of FFT mesh for painting')
         s.add_argument("seed", type=int, help='the random seed')
-        s.add_argument("ratio", type=float, help='the fraction of particles to keep')
+        s.add_argument("ratio", type=float, help='the fraction of particles to keep'
+                       'if sampling type is random.')
         s.add_argument("smoothing", type=float,
                 help='the smoothing length in distance units. '
                       'It has to be greater than the mesh resolution. '
                       'Otherwise the code will die. Default is the mesh resolution.')
         # this is for output..
         s.add_argument("format", choices=['hdf5', 'mwhite'], help='the format of the output')
+        # this is for non-random sampling type
+        s.add_argument("sampling", choices=['random','id_modulo'], 
+                help='Sampling type to select particles for subsamples.')
+        s.add_argument("id_modulo_divisor", type=int, 
+                help='Divisor used to select IDs if sampling is id_modulo.'
+                     'This should be a prime, for example 101, 1009, 10007, 100003.')
+        s.add_argument("id_modulo_remainder", type=int,
+                help='Remainder used to select IDs if sampling is id_modulo.')
+        
 
     def run(self):
         """
@@ -107,9 +132,13 @@ class Subsample(Algorithm):
             with self.datasource.open() as stream:
                 for Position, ID, Velocity in stream.read(columns):
 
-                    with NumpyRNGContext(local_seed):
-                        u = numpy.random.uniform(size=len(ID))
-                    keep = u < self.ratio
+                    if self.sampling == 'random':
+                        with NumpyRNGContext(local_seed):
+                            u = numpy.random.uniform(size=len(ID))
+                        keep = u < self.ratio
+                    elif self.sampling == 'id_modulo':
+                        #print("MSINFO: type of ID", type(ID))
+                        keep = ID % self.id_modulo_divisor == self.id_modulo_remainder
                     Nkeep = keep.sum()
                     if Nkeep == 0: continue 
                     data = numpy.empty(Nkeep, dtype=dtype)
@@ -156,6 +185,9 @@ class Subsample(Algorithm):
                 dataset.attrs['Nmesh'] = self.Nmesh
                 dataset.attrs['Original'] = self.datasource.string
                 dataset.attrs['BoxSize'] = self.datasource.BoxSize
+                dataset.attrs['Sampling'] = self.sampling
+                dataset.attrs['Id_modulo_divisor'] = self.id_modulo_divisor
+                dataset.attrs['Id_modulo_remainder'] = self.id_modulo_remainder
 
         for i in range(self.comm.size):
             self.comm.barrier()
