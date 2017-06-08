@@ -1,5 +1,5 @@
 sharedmem
-pmesh
+pmesh==0.1.20
 pfft-python
 kdcount
 mpsort
