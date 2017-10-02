@@ -175,6 +175,7 @@ class Subsample(Algorithm):
         offset = sum(self.comm.allgather(len(subsample))[:self.comm.rank])
 
         if self.comm.rank == 0:
+            print("MSINFO: size of subsample=", size)
             with h5py.File(output, 'w') as ff:
                 dataset = ff.create_dataset(name='Subsample',
                         dtype=subsample.dtype, shape=(size,))
@@ -188,11 +189,17 @@ class Subsample(Algorithm):
                 dataset.attrs['Sampling'] = self.sampling
                 dataset.attrs['Id_modulo_divisor'] = self.id_modulo_divisor
                 dataset.attrs['Id_modulo_remainder'] = self.id_modulo_remainder
+                # MS: sometimes get in trouble below b/c file does not exist, so try to flush
+                ff.flush()
+
+        # MS: add another barrier
+        self.comm.barrier()
 
         for i in range(self.comm.size):
             self.comm.barrier()
             if i != self.comm.rank: continue
                  
+            # MS: sometimes crash here
             with h5py.File(output, 'r+') as ff:
                 dataset = ff['Subsample']
                 dataset[offset:len(subsample) + offset] = subsample

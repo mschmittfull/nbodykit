@@ -1,0 +1,7 @@
+cd nersc
+# build the dependencies into a bundle
+# this creates the file `$NERSC_HOST/nbodykit-dep.tar.gz`
+bash build.sh deps
+# build the source code into a separate bundle
+# this creates the file `$NERSC_HOST/nbodykit.tar.gz`
+bash build.sh source
