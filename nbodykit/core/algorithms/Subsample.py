@@ -190,9 +190,9 @@ class Subsample(Algorithm):
                 dataset.attrs['Id_modulo_divisor'] = self.id_modulo_divisor
                 dataset.attrs['Id_modulo_remainder'] = self.id_modulo_remainder
                 # MS: sometimes get in trouble below b/c file does not exist, so try to flush
-                ff.flush()
+                #ff.flush()
 
-        # MS: add another barrier
+        # MS: add another barrier (does not seem to help...)
         self.comm.barrier()
 
         for i in range(self.comm.size):
