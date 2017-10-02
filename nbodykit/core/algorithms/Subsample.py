@@ -175,7 +175,7 @@ class Subsample(Algorithm):
         offset = sum(self.comm.allgather(len(subsample))[:self.comm.rank])
 
         if self.comm.rank == 0:
-            print("MSINFO: size of subsample=", size)
+            #print("MSINFO: size of subsample=", size)
             with h5py.File(output, 'w') as ff:
                 dataset = ff.create_dataset(name='Subsample',
                         dtype=subsample.dtype, shape=(size,))
@@ -193,7 +193,7 @@ class Subsample(Algorithm):
                 #ff.flush()
 
         # MS: add another barrier (does not seem to help...)
-        self.comm.barrier()
+        #self.comm.barrier()
 
         for i in range(self.comm.size):
             self.comm.barrier()
